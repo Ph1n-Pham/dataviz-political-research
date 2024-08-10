@@ -1,0 +1,471 @@
+---
+title: "The Prevalence and Role of Racism in 2020 American Politics"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output: pdf_document
+  
+  
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+
+#install.packages("ggcorrplot")
+library(tidyverse)
+library(googlesheets4)
+library(ggcorrplot)
+library(car)
+library(scales)
+library(ggridges)
+#library(remotes)
+#remotes::install_github("ryanburge/socsci")
+library(socsci)
+library(paletteer)
+library(reshape2)
+library(ggalluvial)
+theme_pham <- function() {
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="top")
+}
+
+
+
+theme_djupe <- function() {
+  theme_minimal() %+replace%
+  theme(text=element_text(family="G", size=12),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        legend.position = "bottom",
+        plot.title.position = "plot")
+}
+
+gs4_deauth()
+c20 <- range_speedread("https://docs.google.com/spreadsheets/d/1hON9mI1Zm6F3iX1rEJww6S8ta_cTHJQDVhBqldh9kog/edit?usp=sharing")
+
+#c20 <- c20 %>% rename_all(tolower)
+
+#Let's make a racism index. We have to recode some of them in the process.
+c20 <- c20 %>% mutate(racism=(((CC20_440a) + 
+                                (6-CC20_440b) + 
+                                (6-CC20_441a) + 
+                                (CC20_441b))-4)/16)
+c20 %>% ct(racism)
+
+#Let's recode each individual variable so that the high value is more racially resentful
+c20 <- c20 %>% mutate(racism1=CC20_440a,  
+                      racism2=6-CC20_440b, 
+                      racism3=6-CC20_441a, 
+                      racism4=CC20_441b)
+
+#Can we make a sexism index? Yes!
+c20 <- c20 %>% mutate(sexism=(((5-CC20_440c)+(5-CC20_440d))/8))
+
+# Define the inputstate to stabbr mapping
+state_mapping <- c(1:56)
+stabbr_mapping <- c("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY")
+
+# Initialize a vector to store the results
+stabbr_result <- vector("character", length(c20$inputstate))
+
+# Loop through each value of inputstate
+for (i in 1:length(c20$inputstate)) {
+  # Get the index of stabbr_mapping where inputstate matches
+  index <- which(state_mapping == c20$inputstate[i])
+  # Assign the corresponding stabbr value to stabbr_result
+  stabbr_result[i] <- stabbr_mapping[index]
+}
+
+# Add stabbr_result to c20 data frame
+c20$stabbr <- stabbr_result
+
+#==================
+
+# Define the inputstate to stabbr mapping
+race_mapping <- c(1:8)
+racer_mapping <- c("White", "Black or African-American", "Hispanic or Latino", "Asian or Asian-American","Native American", "Two or more races", "Other", "Middle Eastern")
+
+# Initialize a vector to store the results
+racer_result <- vector("character", length(c20$race))
+
+# Loop through each value of inputstate
+for (i in 1:length(c20$race)) {
+  # Get the index of stabbr_mapping where inputstate matches
+  index <- which(race_mapping == c20$race[i])
+  # Assign the corresponding stabbr value to stabbr_result
+  racer_result[i] <- racer_mapping[index]
+}
+
+# Add stabbr_result to c20 data frame
+c20$raceabbr <- racer_result
+```
+
+
+## 1. Introduction
+
+Amidst the intricacy of American politics, racism remains to be a thread persists with unsettling consistency. Despite strides towards equality and social justice, the specter of racial discrimination continues to haunt the nation, shaping political discourse and societal dynamics. As the United States approaches its 250th year since inception, the question emerges: why does racism endure, and what are its ramifications for the American electorate?
+
+The urgency of investigating racism's enduring presence is underscored by recent political developments, notably the tenure of a figure often referred to as the "tweeter-in-chief." Throughout this era, racial slurs and divisive rhetoric were wielded with alarming frequency, serving as a stark reminder of the deep-seated racial tensions that persist within segments of the populace. Against this backdrop, it becomes imperative to delve into the complex interplay between racist sentiments, public policy views, and electoral choices.
+
+In this paper, we embark on a multifaceted exploration aimed at unraveling the intricate nexus of racism and American politics. Utilizing data sourced from the post-election Cooperative Election Survey (CES), we seek to document and analyze the prevalence of racist attitudes within the American public. By examining the coherence of established measures and dissecting the distribution of racial views, we endeavor to shed light on the contours of contemporary racial attitudes.
+
+Furthermore, our inquiry extends to the broader implications of racism on public policy preferences. We pose critical questions: Does racism operate within bounded ideological confines, or does it transcend partisan affiliations? Are there other evident patterns linking racist beliefs to specific policy stances? Through analysis and data visualizations, we aim to uncover the intricate ways in which racism intersects with the political landscape, shaping both policy discourse and electoral outcomes.
+
+As we navigate through these interconnected realms, our goal is to offer nuanced insights into the influence of racism on American politics. By elucidating the underlying mechanisms driving racial attitudes and their complications for the democratic process, we aspire to contribute to a deeper understanding of this challenge confronting the nation.
+
+
+## 2. Theory Development
+
+In this paper, we will explore several factors that may influence the persistence of racism in American politics and its complex effect on the electorate. These factors encompass:
+
+- Racism Distribution: We acknowledge the historical roots of racism in the United States and its enduring impact on contemporary society. By examining overall distribution of racism in votes' response, we aim to understand how racism influences political opinions and behaviors, shedding light on the intricate dynamics of racial attitudes within the voting populace.
+
+- Racism by Sexism: In acknowledging the interconnection of racism and sexism within societal structures, we delve into the phenomenon of racism compounded by sexism. By examining how racial discrimination intersects with gender bias, we aim to uncover the behaviors of voters' responses in the questions related to racism and sexism.
+
+- Political Partisanship: We acknowledge the role of political affiliation in shaping attitudes towards race. Yet, we aim to delve deeper into the mechanisms by which partisan politics intersect with racial discourse. Do certain political parties perpetuate or challenge racial stereotypes through their policies and rhetoric?
+
+By examining these potential factors and their mechanisms, we aim to move beyond surface-level correlations and gain a nuanced understanding of the complex dynamics of racism in American politics. This knowledge can inform future research, policy interventions, and efforts to promote racial equality within the political sphere.
+
+
+## 3. Data Statement
+
+We will examine the Cooperative Election Survey (CES) dataset to assess the prevalence of racism among the 2020 electorate by analyzing responses to questions pertaining to race and other studied subjects. Leveraging citizens' opinions on race-related inquiries provides a potent method for exploring nuanced topics such as racism. By contextualizing these responses alongside data from other survey questions, we can formulate hypotheses regarding the correlations between racism and various attributes.
+
+To contextualize participants' responses regarding racism, we have developed a racism index based on the dataset. This index ranges from 0 to 1, where a score of 0 indicates minimal racism and a score of 1 indicates significant racism.
+
+
+## 4. Results
+
+#### 4.1: Racism responses
+
+The analysis reveals that a significant portion of voters in the United States demonstrate little to no racism, which is an encouraging trend. However, the distribution of racism levels among voters spans a wide range, indicating a diversity of attitudes towards race.
+
+```{r, warning=FALSE}
+#Taking a look at the distribution of the index -- lots of options
+c20 %>% ggplot(aes(x=racism)) + geom_histogram(bins = 30) +
+  labs(title="\t   Figure 1 - Distribution of Racism Index in 2020 American Politics\n\t   The 0 index score has most count",
+       caption="Source: 2020 Cooperative Election Survey.",
+       x="Racism Index",
+       y="Count") +
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="top")
+
+
+```
+
+While this gives us an overview, it does not explain the role of different racial groups in contributing to overall racism. Thus, Figure 2 provides insight into the distribution of racism levels across different races.
+
+
+```{r, warning=FALSE}
+c20 %>% ggplot(aes(x=racism, y=as.factor(raceabbr), fill=as.factor(raceabbr))) + geom_density_ridges(quantiles=2, quantile_lines=TRUE) +
+  labs(y="", x="Racism Index", title= "\t\t\t\t   Figure 2 - Distribution of Racism Index by Different Races", caption="Source: 2020 Cooperative Election Study.")+
+  theme_pham() +
+  theme(legend.position = "")
+```
+
+The survey indicates that the majority of individuals from all studied racial backgrounds exhibit little to no racism. However, there are variations among racial categories, with some showing a higher proportion of individuals with elevated racism index scores. Further analysis into the distribution and correlations between the four variables comprising the racism index is needed for a more comprehensive understanding. 
+
+#### 4.2 Racism Correlations
+
+The survey results indicate a tendency among U.S. voters to strongly agree or disagree with the selected racism-related questions, contributing to the predominant distribution observed in the low racism index range. However, Figure 3 highlights a significant percentage of voters expressing a belief that racial problems in the U.S. are rare, a sentiment that may indicate latent racist attitudes. To have a deeper understanding of how these variables correlate with each other, a correlation analysis would be needed to see how each variable correlates with one another.
+
+```{r}
+#Showing the individual results of the four racism questions
+c20 %>% gather(key="rqs", value="rans", racism1, racism2, racism3, racism4, na.rm=TRUE) %>% 
+  group_by(rqs) %>% ct(rans) %>% 
+  mutate(rans=frcode(rans==1 ~ "Strongly\nAgree",
+                     rans==2 ~ "Agree",
+                     rans==3 ~ "Neither",
+                     rans==4 ~ "Disagree",
+                     rans==5 ~ "Strongly\nDisagree")) %>% 
+  mutate(rqs=frcode(rqs=="racism1" ~ "White people in the U.S.\n have certain advantages because\nof the color of their skin.",
+                    rqs=="racism2" ~ "Racial problems in the U.S. are \nrare, isolated situations [Reverse Coded].",
+                    rqs=="racism3" ~ "Irish, Italians, Jewish and\n many other minorities overcame\n prejudice...Blacks should do the same\nwithout any special favors [Reverse Coded].",
+                    rqs=="racism4" ~ "Generations of slavery and\n discrimination have created\n conditions that make it difficult for\n blacks to work their way out of the lower class.")) %>% 
+  ggplot(aes(x=rqs, y=pct, fill=as.factor(rans))) + 
+  geom_col(position=position_stack(reverse=TRUE), color="black", alpha=.7) +
+  geom_text(aes(label=pct*100), position=position_stack(reverse=TRUE, vjust=.5)) +
+  coord_flip() +
+  theme(legend.position = "top") +
+  scale_fill_manual(name="", values=c("#784116FF", "#9CB6A9FF", "#ACCFCBFF", "#A8BE74FF", "#BF7417FF")) +
+  scale_y_continuous(labels=percent_format(accuracy=1)) +
+  labs(x="", y="", caption="Source: 2020 Cooperative Election Study.",
+       title="Figure 3 - Percentage of Each Response for Each Racism Question") +
+  #scale_fill_paletteer_d("ButterflyColors::anteos_clorinde", name="") +
+  theme_pham()
+  
+#paletteer_d("ButterflyColors::anteos_clorinde")
+#https://emilhvitfeldt.github.io/r-color-palettes/discrete.html
+
+```
+
+Overall, the variables related to racism exhibit high correlations with each other, indicating consistency in voters' responses across all racism questions, as shown in Figure 4.
+
+```{r}
+library(corrplot)
+#https://cran.r-project.org/web/packages/corrplot/vignettes/corrplot-intro.html
+
+#First we create a new object that holds the correlation results. 
+racismcorrs <- c20 %>% dplyr::select(racism1, racism2, racism3, racism4) %>% drop_na() %>% cor(.)
+
+#Then we can visualize it with the corrplot function - there are lots of options, so see the web link above if you want to learn more. 
+#corrplot(racismcorrs, method="square", addCoef.col = 'black', type="upper", diag=F)+
+##  theme(axis.text.x=element_text(angle=45, hjust=1),
+#        panel.background = element_rect(fill="white"),
+#        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+#        plot.title.position = "plot",
+#        plot.background = element_rect(fill="gray90", color="black"),
+#        legend.position="top")
+
+```
+
+```{r}
+#Tutorial: https://dk81.github.io/dkmathstats_site/rvisual-corrplots.html
+
+upper_gamb <- racismcorrs
+
+# Make upper triangular matrix by setting NA to lower triangular part:
+upper_gamb[lower.tri(upper_gamb)] <- NA
+
+# Melt this upper triangular matrix and remove NA values:
+
+up_m_gamb <- melt(upper_gamb, na.rm = TRUE)
+
+# Ggplot upper triangular correlation matrix:
+
+ggplot(data = up_m_gamb, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(midpoint = 0.5, mid ="grey70", limits = c(-1, +1)) +
+  labs(title = "\t      Figure 4 - Correlation Matrix between Racism Variables", 
+  x = "", y = "", fill = "", caption = "Source: 2020 Cooperative Election Study.") +
+  theme_pham() +
+  theme(legend.position="right",
+        #plot.title = element_text(hjust = 0.5, colour = "black"), 
+        #axis.title.x = element_text(face="bold", colour="darkgreen", size = 12),
+        #axis.title.y = element_text(face="bold", colour="darkgreen", size = 12),
+        legend.title = element_text(face="bold", colour="brown", size = 10)) +
+        geom_text(aes(x = Var1, y = Var2, label = round(value, 2)), color = "black", 
+        fontface = "bold", size = 5)
+```
+
+We can take a further step to see how racism in the US voters correlate with sexism. 
+
+
+#### 4.3 Racism by Sexism
+
+The survey data indicates a fair distribution of responses to sexism-related questions overall, with the majority of voters disagreeing with such opinions, suggesting widespread rejection of sexist attitudes.
+
+```{r, warning=TRUE}
+#install.packages("ggalluvial")
+
+#https://r-charts.com/flow/ggalluvial/
+
+c20 %>% gather(key="sexismqs", value="sexismans", CC20_440c, CC20_440d, na.rm=T) %>% 
+  mutate(sexismans=frcode(sexismans==1 ~ "Strongly Agree",
+                          sexismans==2 ~ "Somewhat\nAgree",
+                          sexismans==3 ~ "Neither",
+                          sexismans==4 ~ "Somewhat\nDisagree",
+                          sexismans==5 ~ "Strongly\nDisagree")) %>%
+  mutate(sexismqs=frcode(sexismqs=="CC20_440c" ~ "Women seek to gain\npower by getting\ncontrol over men",
+                         sexismqs=="CC20_440d" ~ "Women are too\neasily offended")) %>% 
+  group_by(sexismqs) %>% ct(sexismans) %>% 
+  dplyr::select(-pct) %>% 
+  ggplot(aes(axis1=sexismqs, axis2=sexismans, y=n)) +
+  geom_alluvium(aes(fill = sexismans),
+                curve_type = "cubic") +
+  geom_stratum() +
+  geom_text(stat = "stratum",
+            aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("Survey", "Response"),
+                   expand = c(0.15, 0.05)) +
+  labs(y="", y="", title="    Figure 5 - The Response Distribution for Sexism-related Questions\n    Most Voters Disagree with Sexism-related Questions", caption = "Source: 2020 Cooperative Election Study.")+
+  theme(text=element_text(family="G"),
+        legend.position = "none",
+        axis.text.x=element_text(),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()
+        )
+  
+```
+
+Upon examining responses by gender, both male and female respondents appear to exhibit a similar correlation between their racism and sexism tendencies. Figure 6 suggests a strong relationship between strong racism and strong sexism, implying a higher likelihood of someone being racist if they are also sexist. However, further in-depth analysis is necessary to validate this claim, as data visualization alone cannot establish conclusive evidence.
+
+```{r, warning=FALSE, }
+#Relationship between sexism and racism
+#c20 %>% ggplot(aes(x=racism, y=sexism)) + 
+#  geom_jitter(width=.03, height=.03, alpha=.3) + 
+#  geom_smooth(color="yellow")
+
+#c20 %>% corr(racism, sexism) #r=.60
+
+#c20 %>% ct(sexism)
+
+# Define the inputstate to stabbr mapping
+gender_mapping <- c(1:2)
+genderr_mapping <- c("Male", "Female")
+
+# Initialize a vector to store the results
+genderr_result <- vector("character", length(c20$gender))
+
+# Loop through each value of inputstate
+for (i in 1:length(c20$gender)) {
+  # Get the index of stabbr_mapping where inputstate matches
+  index <- which(gender_mapping == c20$gender[i])
+  # Assign the corresponding stabbr value to stabbr_result
+  genderr_result[i] <- genderr_mapping[index]
+}
+
+# Add stabbr_result to c20 data frame
+c20$genderr <- genderr_result
+
+c20 %>% group_by(genderr, sexism) %>% mean_ci(racism) %>% 
+  ggplot(aes(x=sexism, y=mean, color=as.factor(genderr))) + 
+  geom_point() + 
+  geom_smooth(method="lm") +
+  facet_wrap(~genderr)+
+  theme_pham()+
+  theme(legend.position = "none",)+
+  labs(title = "          Figure 6 - Male vs Female in Sexism\n          Both Genders Show the Same Amount of Racism", 
+       y="Racism", x="Sexism", caption = "Source: 2020 Cooperative Election Study.")
+
+#c20 %>% filter(gender==1) %>% corr(racism, sexism) #r=.61
+#c20 %>% filter(gender==2) %>% corr(racism, sexism) #r=.58
+
+```
+
+
+
+#### 4.4 Racism by Partisanship
+
+Segmenting participants by political party reveals interesting insights. Figure 7 indicates that Republican voters tend to show more racial resentment compared to others. However, additional correlation analysis is needed to substantiate this observation and account for potential biases that may influence these findings.
+
+```{r}
+#c20 %>% ct(pid7)
+
+#c20 <- c20 %>% mutate(pid7=car::recode(pid7, "8=4"))#
+
+#This is one approach -- just get a smoothed line for the relationship, but what if it's not linear?
+##$c20 %>% ggplot(aes(x=pid7, y=racism)) + 
+#  geom_smooth(method="lm")
+
+#Let's get means of racism for each value of partisanship?
+c20 %>% group_by(pid7) %>% mean_ci(racism) %>% 
+  ggplot(aes(x=pid7, y=mean, fill=mean)) + 
+  geom_col(color="black") +
+  scale_fill_gradient2(name="Racial\nResentment", low="dodgerblue3", mid="white", midpoint=.4, high="firebrick3") +
+  labs(x="Partisanship", y="Racial Resentment",
+       title="        Figure 7 - Racism by Partisanship\n        Republicans Tend To Have More Racism Resentment Compared To Democrats",
+       caption = "Source: 2020 Cooperative Election Study.") +
+  scale_x_continuous(breaks=seq(1,7,1),
+                     labels=c("Strong\nDemocrat", "Democrat", "Lean\nDemocrat", "Independent",
+                              "Lean\nRepublican", "Republican", "Strong\nRepublican"))+
+  theme_pham()+
+  theme(legend.position = "right")
+  
+
+```
+
+
+Political party affiliation is often influenced by various factors, including attitudes towards gun ownership policies. As we explore the potential connection between gun ownership, political party affiliation, and racism, we delve into an analysis of racism among gun owners to better understand why Republican voters may exhibit more racial resentment compared to others.
+
+
+#### 4.5 Racism by Gun Owners
+
+
+There appears to be a notable difference in racial resentment between gun owners and non-gun owners. While gun owners across different ideologies demonstrate slightly more racial resentment compared to others, Figure 8 alone does not provide conclusive evidence. Further statistical tests, such as t-tests, are necessary to gather more concrete evidence and validate this observation.
+
+
+```{r, warning=F}
+#c20 %>% ct(pid7)
+
+c20 <- c20 %>% mutate(pid7=car::recode(pid7, "8=4"))
+
+#This is one approach -- just get a smoothed line for the relationship, but what if it's not linear?
+#c20 %>% ggplot(aes(x=pid7, y=racism)) + 
+#  geom_smooth(method="lm")
+
+#Let's get means of racism for each value of partisanship?
+#c20 %>% group_by(pid7) %>% mean_ci(racism) %>% 
+#  ggplot(aes(x=pid7, y=mean, fill=mean)) + 
+#  geom_col(color="black") +
+#  scale_fill_gradient2(name="Racial\nResentment", low="dodgerblue3", mid="white", midpoint=.4, high="firebrick3") +
+#  labs(x="Partisanship", y="Racial Resentment") +
+#  scale_x_continuous(breaks=seq(1,7,1),
+#                     labels=c("Strong\nDemocrat", "Democrat", "Lean\nDemocrat", "Independent",
+#                              "Lean\nRepublican", "Republican", "Strong\nRepublican"))
+  
+c20 <- c20 %>%  mutate(gunner=car::recode(gunown, "1:2=1;3:8=0"))
+c20 %>% filter(gunner!="NA") %>% group_by(ideo5, gunner) %>% mean_ci(racism) %>% 
+  ggplot(aes(x=ideo5, y=mean, fill=as.factor(gunner))) + 
+  geom_col(color="black", position=position_dodge()) +
+  scale_fill_manual(name="Gun Owner?", values=c("skyblue2", "darkorange2"), labels=c("No", "Yes")) +
+  labs(x="Ideology", y="Racial Resentment") +
+  scale_x_continuous(breaks=seq(1,5,1),
+                     labels=c("Strong\nLiberal", "Liberal", "Moderate", "Conservative",
+                              "Strong\nConservative")) + 
+  labs(title="\t Figure 8: Racial Resentment is \n\t Modestly Greater for Gun Owners At All Levels of Ideology",
+       caption="Source: 2020 Cooperative Election Study.")+
+  theme_pham()+
+  theme(legend.position="right",)
+
+```
+
+#### 4.6 Racism by Health, Exercise, and Welfare (HEW)
+
+Another factor influencing political party affiliation is views on public spending, including health, education, and welfare. Figure 9 illustrates a negative relationship between racism and views on public spending for both Democrat and Republican voters, suggesting that individuals with higher racial resentment tend to have less defined stances on their party's views on public spending.
+
+```{r, warning=FALSE}
+#Is the effect of racial resentment in the Democratic Party comparable to the effect of racial resentment in the Republican Party in their views on public spending (on HEW: health, education, and welfare -- CC20_443s)?
+
+hewcorrs <- c20 %>% dplyr::select(CC20_443_1, CC20_443_2,CC20_443_3) %>% drop_na() %>% cor(.)
+
+#Then we can visualize it with the corrplot function - there are lots of options, so see the web link above if you want to learn more. 
+#corrplot(hewcorrs, method="square", addCoef.col = 'black', type="upper", diag=F)
+
+#Correlations look pretty strong, I think I'll combine them.
+
+c20 <- c20 %>% mutate(hew=((5-CC20_443_1)+(5-CC20_443_2)+(5-CC20_443_3))/12)
+
+c20 %>% filter(pid3<3) %>% 
+  ggplot(aes(x=racism, y=hew, color=as.factor(pid3))) + 
+  geom_smooth() +
+  scale_color_manual(name="Political Party", values=c("dodgerblue2", "firebrick2"), labels=c("Democrats", "Republicans"))+
+  theme_pham()+
+  labs(x="Racism Index", y= "HEW Index",
+       title="\t Figure 9: The Effect of Racial Resentment in Political Party To \n\t Their Views on Public Spending (Health, Exercise, and Welfare)",
+       caption="Source: 2020 Cooperative Election Study.",
+       )+
+  theme(legend.position="right", )
+  
+  
+```
+
+
+## 5. Conclusion
+
+In conclusion, our exploration into the prevalence and role of racism in 2020 American politics reveals several key findings. Despite significant strides towards equality and social justice, racism remains a persistent force within the American electorate, shaping political discourse and influencing policy preferences.
+
+Through rigorous analysis of data sourced from the Cooperative Election Survey (CES), we have documented the distribution of racial attitudes among the American public. Our findings indicate that while the majority of voters exhibit little to no racism, there are notable variations across different racial groups and political affiliations.
+
+Furthermore, our investigation into the intersectionality of racism with other socio-political factors has yielded insightful results. We observed strong correlations between racism and sexism, as well as between racism and partisanship. Republican voters, in particular, demonstrated higher levels of racial resentment compared to their Democratic counterparts.
+
+Moreover, our analysis suggests a nuanced relationship between racism and policy preferences, particularly in the realms of gun ownership and public spending on health, education, and welfare. Racially resentful voters tend to hold more conservative views on these issues, indicating a potential influence of racial attitudes on policy stance.
+
+Overall, our study underscores the enduring influence of racism on American politics and highlights the need for continued efforts to combat racial discrimination and promote inclusivity in the democratic process. By understanding the complex dynamics of racism within the electorate, policymakers and advocates can better address systemic inequalities and strive towards a more equitable society.
+
+Moving forward, it is imperative to conduct further research to deepen our understanding of the mechanisms driving racial attitudes and their impact on political behavior. Through interdisciplinary collaboration and evidence-based policy making, we can work towards building a more just and inclusive democracy for all Americans.
+
+
+
