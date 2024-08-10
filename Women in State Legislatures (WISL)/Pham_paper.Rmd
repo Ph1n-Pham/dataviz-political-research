@@ -1,0 +1,371 @@
+---
+title: "MA1"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    theme: simplex
+    toc: true
+    toc_float:
+      collapsed: true
+    code_folding: hide
+---
+
+## Setup Environment
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message = FALSE)
+
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(socsci)
+library(ggridges)
+library(geofacet)
+gs4_deauth()
+winl <- range_speedread("https://docs.google.com/spreadsheets/d/1RXODGOah5_aSrmCNhRKFl9H5jDSJeCXpjYjDikmTZv8/edit?usp=sharing")
+
+#Recodes upper house NAs to zero so we can math
+#the pipe %>% is produced by cmd-shift-m or ctrl-shift-m
+winl <- winl %>% mutate(U_seats=car::recode(U_seats, "NA=0"),
+                        U_women=car::recode(U_women, "NA=0"))
+#This creates total percent women from lower and upper houses
+winl <- winl %>% mutate(T_pctw=(L_women+U_women)/(L_seats+U_seats))
+
+
+#This brings in the Women in State Legislatures
+gs4_deauth()
+wisl <- range_speedread("https://docs.google.com/spreadsheets/d/109o5cvNxytbscanJN05e6FtY57XKQza1wxCVCm-jPSM/edit?usp=sharing")
+income <- range_speedread("https://docs.google.com/spreadsheets/d/1mFBP20LMl2PY0zily6qcGCmkYJbclPCnPNaS9S8DTBc/edit?usp=sharing")
+state_pop <- range_speedread("https://docs.google.com/spreadsheets/d/1RD2_CKOeaY9_1RJMPMXliZsullUnnJxLnlWa8OzDWZc/edit?usp=sharing")
+
+wisl <- left_join(wisl, state_pop, by=c("stabbr", "region"))
+wisl <- left_join(wisl, income, by="state")
+
+ed <- range_speedread("https://docs.google.com/spreadsheets/d/1zuhyOfi_RyVAF4AzgZMInCFybRMB7NdH1pSxhoUKX8Y/edit?usp=drive_link")
+ed <- ed %>% rename(state = statename)
+wisl <- left_join(wisl, ed, by="state")
+
+
+pvote <- range_speedread("https://docs.google.com/spreadsheets/d/18-AuFROUzTvIOcI9lx7Op8-4GdJ_Xywl5aZHm6_JAyk/edit?usp=drive_link")
+
+#we need to parse vote to just 2020 and then just the candidates and make a percentage variable!
+bvote <- pvote %>% filter(year==2020, party_simplified=="DEMOCRAT") %>% 
+  mutate(pbiden=candidatevotes/totalvotes) %>% dplyr::select(pbiden, stabbr)
+tvote <- pvote %>% filter(year==2020, party_simplified=="REPUBLICAN") %>% 
+  mutate(ptrump=candidatevotes/totalvotes) %>% dplyr::select(ptrump, stabbr)
+
+bvote <- left_join(bvote, tvote, by="stabbr")
+#Is it a Biden or Trump State?
+bvote <- bvote %>% mutate(bidenstate=case_when(pbiden>ptrump ~ "Biden State",
+                                               pbiden<ptrump ~ "Trump State"))
+wisl <- left_join(wisl, bvote, by="stabbr")
+
+sexism <- range_speedread("https://docs.google.com/spreadsheets/d/1EimuQyMDp23ADJ1T5YkqdGq2UkLeUpPWItGTs8uEQmM/edit?usp=drive_link")
+religion <- range_speedread("https://docs.google.com/spreadsheets/d/1WHuYKzUwdMSxtUy-D545oSl5kmzHECyrGWFHPoU1qds/edit?usp=drive_link")
+suffrage <- range_speedread("https://docs.google.com/spreadsheets/d/1LLS3Po3wDHg5MY6tnbntift9r17pvip2TNLG882huTI/edit?usp=drive_link")
+
+wisl <- left_join(wisl, suffrage, by=c("stabbr", "state","region"))
+wisl <- left_join(wisl, religion, by="stabbr")
+wisl <- left_join(wisl, sexism, by="stabbr")
+
+#make the suffrage data usable
+wisl <- wisl %>% mutate(suffrage_full_year=car::recode(suffrage_full_year, "NA=1920"), 
+                        firstmover=case_when(suffrage_full_year<1920 ~ "Early",
+                                             suffrage_full_year==1920 ~ "Amendment"))
+
+rm(pvote, bvote, tvote)
+rm(sexism, religion, suffrage)
+
+#Bringing in some mapping files
+gs4_deauth()
+sc <- range_speedread("https://docs.google.com/spreadsheets/d/1tEU-5eivmnIa_G1Vf-tsfpFlyYDDzucJ_NMUtVgfp9I/edit?usp=drive_link")
+
+maps <- range_speedread("https://docs.google.com/spreadsheets/d/1wKlyzWVbdffNgXnKXVIZQhS2r_oy6UuoQzqoj8mS19I/edit?usp=drive_link")
+
+maps <- left_join(maps, wisl, by=c("state", "stabbr"))
+maps <- left_join(maps, sc, by="state")
+
+
+```
+
+## 1. Introduction
+
+
+The role of women in politics has been a rising debate in modern politics. A stark incongruity characterizes American politics: while women comprise over 50% of the population, their representation in Congress remains woefully inadequate at only about half that amount. This persistent under-representation demands thorough investigation, and fortunately, the United States provides a unique opportunity for such exploration through its diverse laboratories of democracy (the individual states). By harnessing state-level data on Women in State Legislatures (WISL), this paper undertakes a multifaceted analysis with two critical objectives:
+
+- Global Context: We aim to situate the American WISL disparity within a broader international context. Does this issue represent a distinct anomaly unique to the United States, or does it reflect a more generalized pattern across developed countries? By comparing WISL data across select developed countries, we can gain valuable insights into the global landscape of female political representation.
+
+- Explaining WISL Variation: Our analysis delves into the factors driving the observed variation in WISL across American states. We explore potential explanations encompassing various domains, including partisanship, institutions (suffrage dates), and resources (education levels). However, this investigation goes beyond mere identification of patterns. We aim to interpret the underlying mechanisms at play. Do specific political parties exhibit contrasting strategies that attract or hinder female candidates? How do historical legacies, such as the level of suffrage expansion, influence current political realities? Does higher female education translate into increased political participation through the acquisition of necessary resources and skills? Finally, how do societal attitudes towards women, even when indirectly measured, shape their willingness and ability to engage in the political process?
+
+By addressing these questions, we will delve into the complex interplay of factors contributing to the gender gap in American politics. Understanding these mechanisms is not only an academic pursuit but also holds significant implications for crafting effective interventions and ultimately working towards a more equitable political landscape where women's voices are truly reflected in representation.
+
+
+## 2. Theory Development
+
+
+In this paper, we will identify various factors potentially influencing Women in State Legislatures (WISL) representation from establishing correlations. These are the potential domains that may help us explain the variation in WISL:
+
+- Partisanship: We acknowledge the established correlation between political party affiliation and WISL. However, we delve deeper to uncover potential mechanisms at play. Do specific parties attract more female candidates through targeted recruitment strategies? Do differences in candidate support patterns based on party ideology influence outcomes? 
+
+- Socioeconomic Resources: We acknowledge the potential association between higher female education attainment and higher WISL. However, we explore mechanisms like how education empowers women to participate. Does increased education lead to greater political confidence and campaign skills? Does it grant access to valuable professional networks that aid in political advancement?
+
+- Historical Legacy: We recognize the potential link between states with earlier suffrage dates and higher WISL. However, we delve into the mechanisms by which this historical legacy might influence the present. Do established political norms ingrained after earlier suffrage pave the way for greater female representation? Or do entrenched power structures within political systems still favor the status quo?
+
+By examining these potential mechanisms, we aim to move beyond simply identifying correlations and gain a deeper understanding of the complex factors influencing WISL. This knowledge can inform future research, policy interventions, and ultimately contribute to a more equitable political landscape where women's voices are truly represented.
+
+
+## 3. Data Statement
+
+In order to test these expectations, we will draw on data from the following sources: 
+
+- IPU for the WINL data
+- CAWP for WISL (until 2021)
+- US Census for demographics (e.g., education, state pop size)
+- Democracy Fund’s Voter Study Guide for the sexism data
+- The ARDA for the religion data. 
+- Suffrage data from Wikipedia
+- Presidential vote by state from MIT Election Data + Science Lab
+
+
+We will perform a descriptive analysis on the American WISL with other countries using both WISL and WINL data. Thus, we will try to explain the disparity between women representation in politics in the US and the world.
+
+
+To explain the theory of the relationships between WISL and its potential causes, we employ bivariate and potentially trivariate analyses to identify correlations between WISL and our chosen explanatory variables. The chosen variables we will use in our analysis are partisanship, suffrage dates, education levels, and sexism collected through multiple sources mentioned above. However, it is important to acknowledge that these analyses cannot establish causality; only associations between studied variables will be conducted.
+
+
+
+## 4. Results
+
+
+#### 4.1 The US women represenation in global context
+
+
+While the United States falls within the average range of female representation in world legislatures, as evidenced by its position at 73rd in Figure 1, a closer examination reveals a more nuanced picture. Notably, only a handful of countries achieve true parity, highlighting a global under-representation of women in legislative bodies. This underscores the need to analyze the US context not in isolation but within a broader international framework.
+
+
+
+```{r}
+ 
+dur <- "#E51636" #This is Denison red.
+
+#This creates a top half/bottom half variable called "half".
+winl <- winl %>% mutate(half=ntile(T_pctw, 2))
+
+#Now the graph with options commented out.
+winl %>% ggplot(aes(x=reorder(Country, -T_pctw), y=T_pctw)) +
+  geom_col(aes(fill=as.factor(half))) +
+  geom_col(data=filter(winl, Country=="United States of America"), fill=dur) +
+  scale_y_continuous(breaks=seq(0,.6, .1), labels=percent_format(accuracy=1)) +
+  scale_x_discrete(breaks=c("Cuba", "United Kingdom", "United States of America", "Azerbaijan"), 
+                   #labels=abbreviate, labels=c("Cuba"="Cuba", "United Kingdom"="UK", "United States of America"="USA", "Azerbaijan"="Azer")
+                   ) + 
+  scale_fill_manual(name="Women's Representation", values=c("darkorange2", "skyblue2"), 
+                    labels=c("Bottom Half", "Top Half")) +
+  labs(x="World Countries", y="Percent Women in National Legislatures",
+       caption="Source: IPU.\nNote: The graph uses data from all legislatures in the country, whether 1 or 2.",
+       title="Figure 1 - Women's Representation in World Legislatures - The US Ranks 73rd") +
+  annotate("text", x=80, y=.28, hjust=0, label="United States, 27%, rank=73rd") +
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+    legend.position="top")
+
+```
+
+
+#### 4.2 Distribution of WISL by Region
+
+
+To gain an initial understanding of women's representation in state legislatures, we begin with a descriptive analysis of the WISL distribution across the United States. Figure 2 visually presents this distribution, hinting at a potentially uneven landscape. A general trend emerges, with the South exhibiting lower female representation compared to the West and Northeast. While this observation offers a starting point, attributing it solely to historical suffrage differences or "political reasons" requires further investigation. 
+
+```{r}
+#This creates a WISL Descriptive Graph with a variety of options
+
+wisl %>% ggplot(aes(x=reorder(stabbr, pct_women), y=pct_women)) + 
+  geom_col(aes(fill=region), width=.2) +
+  geom_point(aes(fill=region), size=4.5, shape=21) + #add lollipop
+  geom_text(aes(label=stabbr), size=2) +
+  #scale_y_continuous(breaks=c(0,25,50)) +
+  scale_y_continuous(breaks=seq(0,60,10)) +
+  #theme(legend.position = c(x=.1, y=.8)) +
+  labs(x="US States", y="Percentage Women Legislators",
+       caption="Source: US Census for demographics \nCAWP for WISL.",
+      title = "Figure 2 - Percentage of Women in State Legislatures by Region\nThe South Has Less, the West and Northeast Have More")+
+  theme(
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="bottom",
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major.x = element_blank())
+```
+
+While a descriptive analysis of WISL distribution offers valuable insights, exploring potential explanations requires delving deeper. Leveraging a heatmap in figure 3, we can visually examine the potential role of partisan affiliation in shaping women's representation across states. This visualization suggests a possible link, hinting at a relationship between party affiliation and WISL percentages. 
+
+
+
+```{r}
+#This creates equally sized (in terms of n) groups
+wisl <- wisl %>% mutate(pctw3=ntile(pct_women, 3))
+
+#This allows us to change the size of the group ranges
+wisl <- wisl %>% mutate(pctw3a=car::recode(pct_women, "0:25=1; 26:35=2; 36:70=3"))
+
+wislmaps <- wisl %>% dplyr::select(stabbr, pctw3, pctw3a)
+
+maps <- left_join(maps, wislmaps, by="stabbr")
+
+maps %>% filter(pctw3!="NA") %>% 
+  ggplot(aes(x=long, y=lat, group=group, fill=as.factor(pctw3)))  +
+  geom_polygon(color="black") + 
+  geom_text(aes(label=stabbr, x=longsc, y=latsc)) + 
+  coord_fixed(ratio=1.3) +
+  theme_void() +
+  scale_fill_manual(name="Percent Women in \nState Legislatures", 
+                    values=c("darkorange2", "cornsilk1", "skyblue2"),
+                    labels=c("Under 27%", "27-34%", "Over 34%"))+
+  labs(x="", y="",
+       caption="Source: US Census for demographics \nCAWP for WISL.",
+      title = " Figure 3 - Percentage of Women in State Legislatures by Region\n")+
+  theme(
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="bottom",
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major.x = element_blank())
+
+
+
+```
+
+
+#### 4.3 Partisanship
+
+
+While partisanship's influence on women's legislative representation is recognized, attributing it solely to varying "strategies" and "qualities" requires a more nuanced approach. To gain deeper insights, we need to explore the specific mechanisms through which political parties interact with Women in State Legislatures.
+
+Figure 4 presents an initial observation: states with higher Trump vote shares appear to exhibit lower WISL compared to states with higher Biden vote shares. However, correlation does not equal causation, and further analysis is crucial to understand the underlying mechanisms.To gain a deeper understanding, we need to delve into the specific mechanisms through which political parties may influence WISL.
+
+Do certain parties employ targeted recruitment strategies aimed at attracting more female candidates? Do candidate selection processes, influenced by party ideology, favor specific qualities that may unintentionally exclude women? Furthermore, how do broader party platforms and ideologies shape the environment for female candidates and legislators, potentially creating barriers or opportunities?
+
+Exploring these mechanisms can offer a more detailed understanding of how partisanship interacts with WISL. Instead of relying on single data points like Figure 4, analyzing specific party policies, candidate selection procedures, and ideological stances can provide valuable insights into the complex factors shaping women's representation across the political spectrum.
+
+
+```{r}
+wisl %>% ggplot(aes(x=reorder(stabbr, pct_women), y=pct_women)) + 
+  geom_col(aes(fill=bidenstate), width=.2) +
+  geom_point(aes(fill=bidenstate), size=4.5, shape=21, show_guide=F) +
+  geom_text(aes(label=stabbr), size=2, color="white") +
+  #scale_y_continuous(breaks=c(0, 25, 50)) +
+  scale_y_continuous(breaks=seq(0,60,10)) +
+  scale_fill_manual(name="", values=c("dodgerblue3", "firebrick3")) +
+  #theme(legend.position = c(x=.1, y=.8)) +
+  labs(x="US States", y="Percent Women in Legislatures",
+       title="Figure 4 - Percentage of Women in State Legislatures by Partisanship\nTrump States tend to have lower women representation", caption="Source: CAWP,\nMIT Election Data + Science Lab.") +
+  theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="bottom",
+        panel.grid.major.x = element_blank())
+
+```
+
+As we examined the effect of partisanship in the distribution of the percent women in legislatures, it is important to understand if education is maybe the indirect cause of the differences. 
+
+
+#### 4.4 Education
+
+
+While a high-academic field like politics undoubtedly considers education, Figure 5 suggests a more nuanced relationship between educational attainment and female representation. It presents a linear association in "Trump States" but seemingly no connection in "Biden States." This initial observation, however, requires careful interpretation before concluding that education solely influences women's representation in specific political contexts.
+
+
+```{r, message=FALSE, warning=FALSE}
+#Let's see if education has an effect on WISL.
+ 
+wisl <- wisl %>% mutate(popwomen=fpop/(mpop+fpop))
+
+#adding yet another variable.
+wisl %>% ggplot(aes(x=fcollp, y=pct_women, size=hhi_22)) +
+  geom_point(aes(color=popwomen))+
+  geom_smooth(method="lm", show_legend = FALSE, show_guide = FALSE)+
+  facet_wrap(~bidenstate) +
+  labs(x="Female Education Level", y="Percent Women in Legislatures",
+       title="Figure 5 - Relationship between Education level and Women in State Legislatures\nTrump States tend to have linear relationship between education and women percentage,\nwhile Biden States tend to show no relationship\n", caption="Source: CAWP,\nUS Census for demographics.") +
+  theme(
+        #axis.text.x = element_blank(),
+        #axis.ticks.x = element_blank(),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="",
+        panel.grid.major.x = element_blank())
+
+```
+
+
+#### 4.5 Suffarage Dates
+
+
+We examines the potential link between suffrage dates and WISL, exploring if historical legacies have ongoing effects. However, figure 6 suggests that there historical legacies do not influence present representation. The distribution of Percent Women in Legislatures in states of different "first movers" (Amendment and Early) categories share insignificant differences. 
+
+```{r}
+#Is there a link of time of granting women's suffrage with current women's rep?
+
+wisl %>% ggplot(aes(x=firstmover, y=pct_women, fill=firstmover)) + 
+  geom_boxplot(width=.3) +
+  geom_point()+
+  labs(x="", y="Percent Women in Legislatures",
+       title="Figure 6 - Percentage of Women Representation in different Suffrage Dates", 
+       caption="Source: Wikipedia, CAWP.")+
+  theme(
+        #axis.text.x = element_blank(),
+        #axis.ticks.x = element_blank(),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="bottom",
+        panel.grid.major.x = element_blank())
+
+```
+
+
+While Figure 6 suggests a lack of direct correlation between suffrage dates and WISL, drawing definitive conclusions necessitates a more cautious approach. Other historical, political, and socioeconomic factors unaccounted for in the figure could obscure the true relationship. Additionally, the broad categorization might mask nuances within each group, and analyzing data at a state-by-state level within each category could reveal hidden patterns. Furthermore, the impact of historical events like suffrage expansion might unfold gradually, requiring analysis of trends across decades to capture the full picture. Finally, even if direct correlations are not readily apparent, historical legacies might exert indirect influence through shaping political norms, entrenched power structures, and other factors impacting women's representation. Therefore, it is hard to conclude definitively that historical legacies have no ongoing effect on WISL based solely on its data and figure 6. 
+
+
+## 5. Conclusion
+
+
+In conclusion, our analysis delves into the multifaceted landscape of Women in State Legislatures (WISL), aiming to provide insights into the complex factors shaping female political representation. Rather than simply summarizing our findings, we aim to contextualize them within the broader state of the world and highlight their implications for our understanding of political dynamics.
+
+Our exploration into the global context of WISL reveals a widespread under-representation of women in legislative bodies worldwide. While the United States ranks 73rd in terms of female representation, this position is reflective of a broader global trend rather than an isolated phenomenon. This underscores the need to address systemic barriers to women's political participation on an international scale.
+
+In dissecting the variation of WISL across American states, our analysis uncovers a complex interplay of factors including partisanship, socioeconomic resources, and historical legacies. While correlations exist between these factors and WISL, causality remains undetermined, necessitating further investigation into the underlying mechanisms at play.
+
+Our examination of partisanship highlights its potential influence on WISL, with states exhibiting higher Trump vote shares tending to have lower female representation. However, attributing this solely to partisan strategies requires a deeper exploration of party dynamics and candidate selection processes.
+
+Similarly, while education appears to correlate with WISL in "Trump States," the lack of a clear relationship in "Biden States" underscores the need for nuanced analysis. Understanding how education intersects with other factors such as party affiliation and societal attitudes is crucial for unpacking its true impact on women's political representation.
+
+Furthermore, our analysis of suffrage dates suggests that historical legacies may not directly influence WISL. However, this finding necessitates a cautious interpretation, as indirect mechanisms and unaccounted variables may obscure the true relationship.
+
+In essence, our analysis transcends mere data exploration to offer insights into the complex dynamics shaping women's political representation. By contextualizing our findings within the broader global landscape and highlighting their implications for our understanding of political processes, we contribute to ongoing discussions on gender equality and political participation. Ultimately, our work underscores the importance of addressing systemic barriers and advancing policies that promote equitable political representation for all.
+
+
+
+
