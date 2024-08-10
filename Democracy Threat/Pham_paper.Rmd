@@ -1,0 +1,324 @@
+---
+title: "Is Democracy Under Threat in the World and Why?"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+      base_font:
+        google: EB Garamond
+  pdf_document:
+    toc: true
+  word_document:
+    toc: true
+---
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=F, warning = F)
+
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(ggridges)
+#library(remotes)
+#remotes::install_github("ryanburge/socsci")
+library(socsci)
+library(paletteer)
+library(peacesciencer)
+library(countrycode)
+
+theme_pham <- function() {
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="top")
+}
+
+theme_djupe <- function() {
+  theme_minimal() %+replace%
+  theme(text=element_text(family="G", size=12),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        legend.position = "bottom",
+        plot.title.position = "plot")
+}
+
+#Building the dataset from the peacesciencer package
+rm(dem)
+dem <- create_stateyears() %>% add_democracy()  %>% 
+  add_creg_fractionalization() %>% add_sdp_gdp()
+
+    #Adding war data (in a slightly different way)
+cwinter <- cow_war_inter %>% rename(ccode=ccode1) %>% 
+  group_by(ccode, year) %>% summarize(warnum=mean(warnum))
+
+dem <- left_join(dem, cwinter, by=c("year", "ccode"))
+
+    #just want to know if they were in an interstate war that year
+dem <- dem %>% mutate(atwar=car::recode(warnum, "1:227=1; NA=0"))
+
+#putting polity on a 0-1 scale
+dem <- dem %>% mutate(polity2c=(polity2+10)/20)
+
+#figuring out how many are experiencing backsliding through lagging
+dem <- dem %>% mutate(vdlag=lag(v2x_polyarchy),
+                      backsliding=v2x_polyarchy-vdlag,
+                      backslidingc=case_when(backsliding<0 ~ "Backsliding",
+                                             backsliding>=0 ~ "Not sliding"))
+
+#Recoding polity into three groups: autocracy=0, anocracy=1, democracy=2
+dem <- dem %>% mutate(p3=car::recode(polity2,"-10:-5.1=0;
+                                     -5:5=1; 
+                                     5.1:10=2"))
+
+#Adding a stabbr-like identifier and joining the region (and corruption) data 
+library(countrycode)
+dem <- dem %>% mutate(iso3c=countrycode(ccode, origin="cown", destination="iso3c"))
+gs4_deauth()
+region <- range_speedread("https://docs.google.com/spreadsheets/d/1DRCEa4ygKAZ6ASfeNrPFHQEwfodbBA3YysNE2srx-wE/edit?usp=sharing")
+dem <- left_join(dem, region, by=c("year","iso3c"))
+
+vnmdem <- dem %>% filter(iso3c == "VNM")
+
+```
+
+
+## 1. Introduction
+
+Democracy appears to be under threat in many parts of the world today, including the United States. This raises critical questions about the state of democratic governance globally and the factors that may be contributing to its erosion. In this paper, we will assess whether democracy is indeed fading by engaging multiple measures of this complicated concept. First, we will explore the conceptual underpinnings of democracy, examining the key characteristics that define a democratic system.
+
+We will then delve into various empirical measures of democracy, drawing on data from sources such as the Varieties of Democracy (V-Dem) project, data from Polity IV measure, and peacesciencer. By examining these different approaches to quantifying the degree of democracy in countries around the world, we can gain a more nuanced understanding of global trends and the factors that may be shaping them.
+
+Finally, we will explore potential linkages between the trajectory of democracy and other systemic variables, such as economic growth, conflict, and racial diversity. To provide deeper insights, we will examine case studies of Vietnam to see how these relationships play out in a specific country. This will allow us to assess whether the global patterns we observe hold true at the individual country level, offering a more comprehensive picture of the challenges and opportunities facing democratic systems today.
+ 
+ 
+## 2. Theory Development
+
+In his 1989 book "Democracy and Its Critics," political scientist Robert Dahl outlines the key characteristics of a democratic "polyarchy." Firstly, control over governmental decisions about policy is constitutionally vested in elected officials. Secondly, elected officials are chosen and peacefully removed in relatively frequent, fair, and free elections in which coercion is quite limited. Thirdly, practically all adults have the right to vote in these elections. Most adults also have the right to run for the public offices for which candidates run in these elections. Furthermore, citizens have an effectively enforced right to freedom of expression, particularly political expression, including criticism of the officials, the conduct of the government, the prevailing political, economic, and social system, and the dominant ideology. They also have access to alternative sources of information that are not monopolized by the government or any other single group. Finally, citizens have an effectively enforced right to form and join autonomous associations, including political associations, such as political parties and interest groups, that attempt to influence the government by competing in elections and by other peaceful means.
+
+This conception of democracy emphasizes the importance of a decision-making process in which all members of the group have equal power in dictating how institutions and practices operate. Ideally, this is characterized by free and fair elections/voting processes, an adequate number of options for voters, actors being held accountable by the public, and accountability leading to meaningful reform.
+
+There are various empirical measures used to assess the degree of democracy in a given country. The Polity Project, for example, uses a 21-point scale ranging from -10 (hereditary monarchy) to +10 (consolidated democracy) to capture the spectrum of governing authority. Other prominent indices include the Varieties of Democracy (V-Dem) Electoral Democracy Index, the Economist Intelligence Unit's Democracy Index, and the Freedom House's Freedom in the World survey.
+ 
+These measures typically examine factors such as the competitiveness and inclusiveness of elections, the protection of civil liberties, the functioning of government, political participation, and the political culture. By analyzing these different aspects of democracy, researchers can gain a more nuanced understanding of global trends and the factors that may be shaping them.
+
+At the same time, factors such as economic growth, conflict, racial diversity, and others may also play a role in shaping the trajectory of democracy. Higher levels of economic development, for example, could provide the resources and opportunities that enable greater political participation and the strengthening of democratic institutions. Conversely, the experience of war or social divisions along ethnic or racial lines may undermine the social cohesion and trust necessary for the effective functioning of a democracy.
+
+By examining the interplay between these various factors, both at the global level and through targeted case studies (Vietnam), we can gain a more nuanced understanding of the challenges and opportunities facing democratic systems today. This theoretical framework will guide our empirical investigation, as we seek to uncover the patterns and relationships that are shaping the current state of democracy around the world.
+
+
+## 3. Data and Methods
+
+The analysis in this paper utilizes data from several prominent sources that measure democracy and democratic principles:
+
+- V-Dem (Varieties of Democracy) Dataset: The V-Dem dataset, available on the V-Dem Institute's website, is used to examine multiple dimensions of democracy, including electoral, liberal, participatory, deliberative, and egalitarian principles. Specifically, the analysis draws on the high-level democracy indices described in the V-Dem Codebook (pages 47-49).
+
+- {peacesciencer} Package: The {peacesciencer} package, available on the package's website, provides a comprehensive collection of social science datasets, including measures of democracy. This analysis utilizes the relevant democracy indicators from the {peacesciencer} package, as documented in the package's codebook.
+
+- Polity IV Data Series: The Polity IV data series, provided by the Center for Systemic Peace, is used to assess the level of democracy in countries around the world. The Polity IV index captures the regime authority spectrum on a 21-point scale ranging from -10 (hereditary monarchy) to +10 (consolidated democracy).
+
+The use of these diverse data sources allows for a multifaceted assessment of the state of democracy globally and the factors that may be influencing its trajectory. The specific variables and methodologies employed in the analysis are detailed in the subsequent sections of this paper.
+
+
+## 4. Results
+
+#### 4.1: An empirical comparison of how different democracy measures capture the global trend and a case study of Vietnam.
+
+This analysis draws on two prominent measures of democracy - the V-Dem Electoral Democracy Index (v2x_polyarchy) and the Polity IV index (polity2c) - to assess the state of democratic governance around the world. By examining the relationship between these two metrics, we can gain confidence in the reliability and consistency of our democracy measurements.
+
+As shown in Figure 1, the V-Dem Electoral Democracy Index and the Polity IV index are highly correlated, indicating a strong alignment in their assessment of the level of democracy in countries over the period from 1816 to 2023. This suggests that these two measures, despite their different methodological approaches, are capturing similar underlying democratic principles and trends.
+
+With this foundation of reliable democracy measurement, we can then delve into analyzing the global patterns of democratic development. The analysis reveals a dynamic trajectory, with democracy generally progressing over time, but with significant variations across countries. For instance, the United States has been among the most democratic countries throughout history, while Mexico has lagged behind, as illustrated in Figure 2.
+
+```{r}
+dem %>% gather(key="measures", value="scores", v2x_polyarchy, polity2c, na.rm=T) %>% 
+  group_by(year, measures) %>% mean_ci(scores) %>% 
+  ggplot(aes(x=year, y=mean, color=measures)) +
+  geom_line() +
+  theme_pham() +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.", color = "",
+       title="Figure 1 - Correlation between our Variables: v2x_polyarchy and polity2c\nThey have high correlation to each other without significant difference") 
+
+#Get a correlation between these two time series.
+
+```
+
+
+With the confidence of democracy measurement, we delve into analyzing the global democracy trends. The analysis reflects the dynamic development of democracy over the world. In the big picture, democracy has been developing progressively with USA as one of the most democratic countries throughout the history. The relative comparison between USA and Mexico was backed by figure 2, underscoring the fact that USA has been more of a democratic country than Mexico.    
+
+
+```{r}
+library(gghighlight)
+#https://cran.r-project.org/web/packages/gghighlight/vignettes/gghighlight.html
+
+dem %>% ggplot(aes(x=year, y=v2x_polyarchy)) +
+  geom_line(aes(group=ccode), color="gray80", alpha=.6) +
+  geom_line(data=filter(dem, iso3c %in% c("USA", "MEX", "VNM")), aes(color=iso3c)) +
+  geom_text(data=filter(dem, year==2019, iso3c %in% c("USA", "MEX", "VNM")), 
+            aes(label=iso3c, color=iso3c, x=year+6)) +
+  theme_pham() +
+  labs(x="Year", y="Polyarchy", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 2 - Global Democracy Trend from 1816 to 2023",
+       color = "") 
+
+
+```
+
+At the same time, countries like Vietnam have consistently scored lower on the democracy scale, reflecting their more authoritarian political systems. These divergent trajectories raise important questions about the factors that may be shaping the global trends in democracy, such as the potential influence of war, economic development, and social diversity.
+
+To further explore these relationships, the subsequent analysis will examine the linkages between democracy and variables like war conflict and fractionalization. By combining the global-level insights with a targeted case study, we can develop a more nuanced understanding of the challenges and opportunities facing democratic systems around the world.
+
+#### 4.2: Comparing democracy trends with other (explanatory) indicators, such as war and diversity (“fractionalization”)
+
+The analysis suggests that religion diversity has a positively high correlation with democracy trends in the world, with a coefficient of 0.6 (Figure 3). This indicates that there may be potential causal connections between a country's religion diversity and its level of democracy. One possible mechanism is that religion diversity can highlight the diverse representation of people in a country's politics, which may contribute to more inclusive and responsive democratic institutions. 
+
+Building on the insights about religion diversity, the next step is to explore whether ethnic diversity also shares a similar impact on democracy. Examining the relationship between ethnic fractionalization and democratic trends could provide further insights into the complex interplay between social diversity and the development of democratic systems.
+ 
+
+```{r}
+dem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `Religion Fractionalization`=mean(relfrac, na.rm=T)) %>% 
+  gather(key="vars", value="scores", `Religion Fractionalization`, Polyarchy, na.rm=T) %>% 
+  ggplot(aes(x=year, y=scores, color=vars)) + 
+  geom_line() +
+  theme_pham() +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 3 - Correlation between \n\t\t   Global Democracy Trends and Religion Diversity (Fractionalization)\nReligion diversity highly correlates with democracy trends",
+       color = "") 
+
+#Checking the correlation
+dem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `Religion Fractionalization`=mean(relfrac, na.rm=T)) %>% 
+  corr(Polyarchy, `Religion Fractionalization`)
+```
+
+The analysis further reveals that ethnic diversity, like religion diversity, also has a positively high correlation with global democracy trends. However, while ethnic diversity appears to be associated with higher levels of democracy, it fails to fully explain the sharp increases in the polyarchy score (a measure of electoral democracy) observed throughout the timeline. Instead, ethnic diversity seems to be more closely linked to the general, long-term trend in democratic development.
+
+Given the complex relationship between social diversity and democracy, the investigation now turns to examining the potential impact of another key factor: war. The question arises as to whether war can be considered a strong indicator for the level of democracy in a country.
+
+```{r}
+dem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `Ethnic Fractionalization`=mean(ethfrac, na.rm=T)) %>% 
+  gather(key="vars", value="scores", `Ethnic Fractionalization`, Polyarchy, na.rm=T) %>% 
+  ggplot(aes(x=year, y=scores, color=vars)) + 
+  geom_line()+
+  theme_pham() +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 4 - Correlation between \n\t\t  Global Democracy Trends and Ethnic Diversity (Fractionalization)\nEthnic diversity highly correlates with democracy trends",
+       color = "") 
+
+	#Checking the correlation
+dem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `Ethnic Fractionalization`=mean(ethfrac, na.rm=T)) %>% 
+  corr(Polyarchy, `Ethnic Fractionalization`)
+```
+
+The analysis now turns to examining the potential impact of war on democratic development. Intuitively, one might expect that a country's experience of war, either on its own territory or through participation in conflicts elsewhere, could have a significant influence on its democratic trajectory.
+
+However, the data tells a different story. As shown in Figure 5, the analysis finds no significant correlation between a country's involvement in war and its polyarchy score, a measure of electoral democracy. This suggests that whether a country is in a state of war or not, it does not appear to have a direct, measurable effect on the country's overall democratic trend.
+
+```{r}
+#Let's add wars and then figure out how to display them (use the variable atwar).
+
+dem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `At War?`=mean(atwar, na.rm=T)) %>% 
+  gather(key="vars", value="scores", `At War?`, Polyarchy, na.rm=T) %>% 
+  ggplot(aes(x=year, y=scores, color=vars)) + 
+  geom_line()+
+  theme_pham() +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 5 - Correlation between Global Democracy Trends and War Time\nWar time have insignificant relationship with democracy Trends",
+       color = "") 
+
+	#Checking the correlation
+dem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `At War?`=mean(atwar, na.rm=T)) %>% 
+  corr(Polyarchy, `At War?`)
+```
+
+To further test the initial findings from the global analysis, we now turn to a case study of Vietnam to examine the relationships between religion diversity, ethnic diversity, war, and democratic development at the country level.
+
+
+#### 4.3: A graph or two exploring the case study countries you picked looking into one of the explanations that featured in the bullet point above.
+
+The global analysis had suggested a positive correlation between religion diversity and democracy trends. However, when we examine the case of Vietnam more closely, the relationship appears to be more nuanced. As shown in Figure 6, Vietnam's religion diversity has experienced only a gradual, small increase over recent history, while its polyarchy score (a measure of electoral democracy) has fluctuated within a comparatively small range. This suggests that religion diversity may not be as strongly correlated with democracy trends in the Vietnamese context as the global-level findings had indicated.   
+
+```{r}
+#Let's add wars and then figure out how to display them (use the variable atwar).
+
+vnmdem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `Religion Fractionalization`=mean(relfrac, na.rm=T)) %>% 
+  gather(key="vars", value="scores", `Religion Fractionalization`, Polyarchy, na.rm=T) %>% 
+  ggplot(aes(x=year, y=scores, color=vars)) + 
+  geom_line()+
+  theme_pham() +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 6 - Correlation between \n\t\t  Democracy Trend and Religion Diversity (Fractionalization) in Vietnam\nVietnamese religion diversity does not correlate with its democracy trend",
+       color = "") 
+```
+
+Similarly, the case study of Vietnam indicates that ethnic diversity does not correlate well with the country's democracy trends. Over the time frame of 1816 to 2023, Vietnam has experienced no significant change in its ethnic diversity, while its democracy levels have fluctuated considerably. This finding diverges from the positive relationship observed at the global level, highlighting the importance of considering country-specific contexts. Next, we examine if war can explain the fluctuation of democracy. 
+
+```{r}
+vnmdem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `Ethnic Fractionalization`=mean(ethfrac, na.rm=T)) %>% 
+  gather(key="vars", value="scores", `Ethnic Fractionalization`, Polyarchy, na.rm=T) %>% 
+  ggplot(aes(x=year, y=scores, color=vars)) + 
+  geom_line()+
+  theme_pham() +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 7 - Correlation between \n\t\t  Democracy Trend and Ethnic Diversity (Fractionalization) in Vietnam\nVietnamese ethnic diversity does not correlate with its democracy trend",
+       color = "")
+```
+
+However, as shown in Figure 8, the analysis finds no correlation between Vietnam's involvement in war and its democracy trend. The slump in polyarchy score from 1975-2010 cannot be explained by the country's wartime situation, suggesting that war does not have a significant impact on Vietnam's democratic development.
+
+
+```{r}
+#Let's add wars and then figure out how to display them (use the variable atwar).
+
+dem %>% filter(iso3c=="VNM") %>% 
+  ggplot(aes(x=year)) +
+  geom_line(aes(y=v2x_polyarchy, color=atwar), linewidth=0.8) +
+  scale_color_gradient(name="At War?", low="black", high="red")+
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="right") +
+  labs(x="Year", y="Score", caption="Source: V-Dem and peacesciencer.",
+       title="Figure 8 - Correlation between Democracy Trend and War Time in Vietnam\nWar shows insignificant effect on democracy trend in Vietnam",
+       color = "")
+
+#Checking the correlation
+vnmdem %>% group_by(year) %>% 
+  summarize(Polyarchy=mean(v2x_polyarchy, na.rm=T), `At War?`=mean(atwar, na.rm=T)) %>% 
+  corr(Polyarchy, `At War?`)
+```
+
+
+## 5. Conclusion
+
+This investigation set out to assess whether democracy is under threat globally and explore the factors that may be influencing its trajectory. By examining multiple empirical measures of democracy alongside variables like war involvement, religious diversity, and ethnic fractionalization, our analysis paints a nuanced picture of democratic development around the world.
+
+At the global level, the findings reveal a generally positive relationship between religious and ethnic diversity on one hand, and higher levels of democracy on the other. This aligns with the theoretical notion that social pluralism can foster more inclusive and responsive democratic institutions.
+
+However, the case study of Vietnam demonstrates that these global patterns do not always hold true at the country level. Vietnam's democracy trends appear disconnected from its relatively static levels of religious and ethnic diversity, as well as its experiences with war involvement. This underscores the importance of considering country-specific contexts and dynamics.
+
+The overarching conclusion is that while democracy may indeed be facing challenges in certain parts of the world, the factors shaping its evolution are complex and defy simple generalizations. Religious diversity, ethnic pluralism, and war involvement can potentially influence democratic trajectories, but their impacts are mediated by a multitude of other social, economic, and political forces unique to each national context.
+
+Ultimately, this investigation highlights the need for a more granular, context-sensitive approach to understanding the health of democracy globally. By combining rigorous empirical analysis with in-depth case studies, researchers can develop a more comprehensive and nuanced understanding of the opportunities and obstacles facing democratic governance in the 21st century.
+
+
+
+
