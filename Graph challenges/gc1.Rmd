@@ -1,0 +1,49 @@
+---
+title: "GC1"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+## Setup Environment
+```{r setup, include=TRUE, warning= FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(ggplot2)
+library(readr)
+library(ggthemes)
+library(maps)
+library(ggplot2)
+
+gs4_deauth()
+
+gc1 <- range_speedread("https://docs.google.com/spreadsheets/d/1zKDPly8xnZf_NiAPDhhUrvrgq9it3PTMF6P4jLYdxGM/edit?usp=sharing")
+
+#create a condition column
+gc1$cond <- ifelse(gc1$x < 3.5, "h", "i")
+```
+
+## Plotting
+```{r}
+ggplot(gc1, aes(x=x, y=y, color=cond, shape = cond)) + 
+  geom_point(size = 6, show.legend = FALSE) +
+  labs(
+    title = "Hiiiii visualization",
+    caption = "Phineas Pham") +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        plot.background = element_rect(fill = "pink", color = "black"),
+        panel.background = element_rect(fill = 'black', color = 'pink'))
+```
+
+
+
+

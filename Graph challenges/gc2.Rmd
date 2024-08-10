@@ -1,0 +1,82 @@
+---
+title: "gc2"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+## Setup Environment
+```{r setup, include=TRUE, warning= FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages('cowplot')  #install cowpilot package
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(ggplot2)
+library(readr)
+library(ggthemes)
+library(maps)
+library(ggridges)
+library(cowplot)
+gs4_deauth()
+
+gc2 <- range_speedread("https://docs.google.com/spreadsheets/d/1cQidnm21-KPINymiUv_nkWG77zjmKFRcbf2bILhKJ9A/edit?usp=drive_link")
+gc2 <- na.omit(gc2)
+
+```
+
+
+```{r, include=TRUE, warning= FALSE, message = FALSE}
+par(mfrow = c(1, 2))
+
+plot1 <- gc2 %>% ggplot(aes(x=environment, fill = vdem2)) +
+  geom_density(alpha = .5) +
+  guides(fill = guide_legend(reverse=TRUE)) +
+  theme(legend.title = element_blank(),
+        legend.position="bottom")+
+  labs(caption="\n",
+       x="Percent Rating environment more \nimportant than the economy")
+
+vdem2.colors <- c("Non-democracy"="#FB9A99", "Democracy"="cyan2")
+
+gc22 <- gc2 %>% filter(airpoll_2012<30)
+plot2 <- gc22 %>% ggplot(aes(x=airpoll_2012, y=environment)) +
+  scale_color_manual(name="", values=c("#FB9A99","cyan2")) +
+  geom_point(aes(color=vdem2))+
+  geom_smooth(data=filter(gc22, airpoll_2012>13.6 & airpoll_2012<30), color="red",level=0.999999, fill="#FB9A99") +
+  geom_smooth(color="cyan3",level=0.994, fill="cyan3") +
+  scale_y_continuous(breaks=seq(0,1.0,0.2)) +
+  labs(x="Air Pollution Index \n ",
+       y="Environment more important \nthan the economy") +
+  theme(legend.position = "none") + 
+  guides(color = guide_legend(reverse=TRUE)) +
+  labs(x="Air Pollution Index",
+       caption="Phineas Pham \n Source: World Values Survey")
+
+plot_row <- plot_grid(plot1, plot2)
+
+# now add the title
+title <- ggdraw() + 
+  draw_label(
+    "Protecting the environment should be given priority, \neven if it causes slower economic growth and some loss of jobs",
+    x = 0,
+    hjust = 0
+  ) +
+  theme(
+    # add margin on the left of the drawing canvas,
+    # so title is aligned with left edge of first plot
+    plot.margin = margin(0, 0, 0, 7)
+  )
+plot_grid(
+  title, plot_row,
+  ncol = 1,
+  # rel_heights values control vertical title margins
+  rel_heights = c(0.1, 1)
+)
+```
+
+To my point of view, I think protecting the environment should be given priority because it impacts a lot of social values like mental health, living conditions, etc. that indirectly impacts the economic growth (for example, workers cannot perform efficiently if the weather is worse, thus impacting the economy).
+
+

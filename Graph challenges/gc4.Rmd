@@ -1,0 +1,96 @@
+---
+title: "MA2-prof.Rmd"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+      base_font:
+        google: EB Garamond
+  word_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(ggridges)
+#library(remotes)
+#remotes::install_github("ryanburge/socsci")
+library(socsci)
+library(paletteer)
+library(ggalluvial)
+library(corrplot)
+
+theme_pham <- function() {
+  theme_minimal() %+replace%
+  theme(text=element_text(family="G", size=12),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        legend.position = "bottom",
+        plot.title.position = "plot")
+}
+
+
+gs4_deauth()
+c20 <- range_speedread("https://docs.google.com/spreadsheets/d/1hON9mI1Zm6F3iX1rEJww6S8ta_cTHJQDVhBqldh9kog/edit?usp=sharing")
+
+#c20 <- c20 %>% rename_all(tolower)
+
+#Let's make a racism index. We have to recode some of them in the process.
+c20 <- c20 %>% mutate(racism=(((CC20_440a) + 
+                                (6-CC20_440b) + 
+                                (6-CC20_441a) + 
+                                (CC20_441b))-4)/16)
+c20 %>% ct(racism)
+
+#Let's recode each individual variable so that the high value is more racially resentful
+c20 <- c20 %>% mutate(racism1=CC20_440a,  
+                      racism2=6-CC20_440b, 
+                      racism3=6-CC20_441a, 
+                      racism4=CC20_441b)
+
+#Can we make a sexism index? Yes!
+c20 <- c20 %>% mutate(sexism=(((5-CC20_440c)+(5-CC20_440d))/8))
+
+```
+
+
+
+```{r}
+#create gunown_ys as yes or no values, replace NAs with No
+c20$gunown_yn <- with(c20, ifelse(gunown == 1, "Yes", "No"))
+c20 <- c20 %>% mutate(gunown_yn = ifelse(is.na(gunown_yn), "No", gunown_yn))
+c20 %>% ct(gunown_yn)
+```
+
+
+```{r, warning=FALSE}
+#Let's get means of racism for each value of ideology
+c20 %>% group_by(CC20_340a, gunown_yn) %>% mean_ci(racism) %>% 
+  ggplot(aes(x=CC20_340a, y=mean, fill = gunown_yn)) + 
+  geom_col(stat = "identity", position = "dodge", width = .85, ) +
+  labs(x="\nIdeology", y="Racial Resentment",
+       title="GC4: Racial Resentment is Modestly Greater for Gun Owners\nAt All Levels of Ideology" ,
+       caption="Source: 2020 Cooperative Election Study; @PhineasPham") +
+  scale_x_continuous(breaks=seq(1,7,1),
+                     labels=c("Strong\nLiberal", "Liberal", "Somewhat\nLiberal", "Moderate",
+                              "Somewhat\nConservative", "Conservative", "Strong\nConservative")) +
+  theme_pham()+
+  theme(axis.text.x=element_text(size=7.5))+
+  guides(fill = guide_legend(title = "Gun Owner?"))
+  
+```
+
+
+
+
+

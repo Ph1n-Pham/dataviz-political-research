@@ -1,0 +1,201 @@
+---
+title: "gc6"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output:
+  word_document:
+    toc: true
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: true
+      base_font:
+        google: EB Garamond
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message=F, warning = F)
+
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(ggridges)
+#library(remotes)
+#remotes::install_github("ryanburge/socsci")
+library(socsci)
+library(paletteer)
+library(showtext)
+font_add_google("EB Garamond", "G", regular.wt = 400)
+showtext_opts(dpi = 300)
+showtext_auto(enable = TRUE)
+
+theme_pham <- function() {
+  theme(text=element_text(family="G", size=5),
+        axis.text.x=element_text(angle=45, hjust=1),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"),
+        legend.position="top")
+}
+
+theme_djupe <- function() {
+  theme_minimal() %+replace%
+  theme(text=element_text(family="G", size=12),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        legend.position = "bottom",
+        plot.title.position = "plot")
+}
+
+#The March 2024 Data
+gs4_deauth()
+m24 <- range_speedread("https://docs.google.com/spreadsheets/d/1fsQtQMl0533GgBeVXriL8u_0Fntm4kc77rHuBhSt_H8/edit?usp=sharing")
+m24 <- m24 %>% rename_all(tolower)
+
+#A gift of some recodes for you
+m24 <- m24 %>% mutate(white=car::recode(q49_1, "NA=0"),
+                      hispanic=car::recode(q49_2, "NA=0"),
+                      black=car::recode(q49_3, "NA=0"),
+                      asian=car::recode(q49_4, "NA=0"),
+                      other=car::recode(q49_5, "NA=0"))
+
+
+m24 <- m24 %>% mutate(race=case_when(white==1 & (black!=1 & hispanic!=1 & asian!=1 & other!=1) ~ "White",
+                                     black==1 ~ "Black",
+                                     asian==1 & (black!=1 & hispanic!=1) ~ "Asian",
+                                     hispanic==1 ~ "Hispanic",
+                                     other==1 & (black!=1 & hispanic!=1 & asian!=1)~ "Other"))
+
+m24 <- m24 %>% mutate(drinking=q12-1) 
+m24 <- m24 %>% mutate(drinkingc=car::recode(drinking, "0=0; 1:7=1"))
+
+m24 <- m24 %>% mutate(female=frcode(q45==1 ~ "Men",
+                                    q45==2 ~ "Women"))
+m24 <- m24 %>% mutate(femtran=frcode(q46_1==1 ~ "Men",
+                                     q46_2==1 ~ "Women",
+                                     q46_3==1 | q46_4==1 ~ "Trans/N-B"))
+
+
+m24 <- m24 %>% mutate(varsity=car::recode(q34_1, "NA=0"))
+m24 <- m24 %>% mutate(club_sport=car::recode(q34_2, "NA=0"))
+m24 <- m24 %>% mutate(campus_governance=car::recode(q34_3, "NA=0"))
+m24 <- m24 %>% mutate(employment=car::recode(q34_4, "NA=0"))
+m24 <- m24 %>% mutate(art=car::recode(q34_5, "NA=0"))
+m24 <- m24 %>% mutate(comm_service=car::recode(q34_6, "NA=0"))
+m24 <- m24 %>% mutate(social_justice=car::recode(q34_7, "NA=0"))
+m24 <- m24 %>% mutate(religious=car::recode(q34_8, "NA=0"))
+m24 <- m24 %>% mutate(cross_cultural=car::recode(q34_9, "NA=0"))
+m24 <- m24 %>% mutate(varsity=car::recode(q34_10, "NA=0"))
+m24 <- m24 %>% mutate(other_activities=car::recode(q34_11, "NA=0"))
+
+m24 <- m24 %>% mutate(intl=frcode(q51==1 ~ "International",
+                                    q51==2 ~ "Domestic"))
+
+m24 <- m24 %>% mutate(gpa=q39_1,
+                      talk=q40_1,
+                      late=q41_1)
+
+m24 <- m24 %>% drop_na(q50)
+# Define the inputstate to stabbr mapping
+class_mapping <- c(1:5)
+classr_mapping <- c("Lower Class", "Lower-Middle Class", "Middle Class","Upper-Middle Class", "Upper Class")
+
+# Initialize a vector to store the results
+classr_result <- vector("character", length(m24$q50))
+
+# Loop through each value of q50
+for (i in 1:length(m24$q50)) {
+  # Get the index of stabbr_mapping where inputstate matches
+  index <- which(class_mapping == m24$q50[i])
+  index
+  # Assign the corresponding stabbr value to stabbr_result
+  classr_result[i] <- classr_mapping[index]
+}
+
+# Add stabbr_result to c20 data frame
+m24$q50abbr <- classr_result
+
+# Loop through each value of q50
+for (i in 1:length(m24$q50)) {
+  # Get the index of stabbr_mapping where inputstate matches
+  index <- which(class_mapping == m24$q50[i])
+  # Assign the corresponding stabbr value to stabbr_result
+  classr_result[i] <- classr_mapping[index]
+}
+
+#Two strategies to recoding variables in a batch
+#This is the choice of major. There aren’t a ton of double majors, but you would then gather this so you can see what subscribers to each major family (academic divisions like social sciences) would do or think.
+m24 <- m24 %>% mutate(q23_1r=car::recode(q23_1, "1=1; NA=0"),
+                      q23_2r=car::recode(q23_2, "1=1; NA=0"),
+                      q23_3r=car::recode(q23_3, "1=1; NA=0"),
+                      q23_4r=car::recode(q23_4, "1=1; NA=0"),
+                      q23_5r=car::recode(q23_5, "1=1; NA=0"),
+                      q23_6r=car::recode(q23_6, "1=1; NA=0"))
+
+#This will recode all of the variables that start with "q23_" and then add an "r" to the end of it once recoded. I like that so it indicates what vars are recoded. BTW, the ".x" business is a way to indicate the previous definition of that variable. So .x refers to the q23_ variables. ".names" refers to all the variable names used previously, etc. 
+m24 <- m24 %>% mutate(across(starts_with("q23_"), ~ car::recode(.x, "1=1; NA=0"), .names="{.col}r"))
+
+  #Let's check the results
+m24 %>% ct(q23_1)  #this is the original.
+m24 %>% ct(q23_1r) #this is the recoded one.
+
+```
+
+
+```{r}
+geom_rect_and_mean <- m24 %>%
+  group_by(q50abbr) %>%
+  summarise(mean_value = mean(q36_1, na.rm = TRUE))
+
+# Find the maximum value of mean_value
+max_mean_value <- max(geom_rect_and_mean$mean_value)
+
+# Find the minimum value of mean_value
+min_mean_value <- min(geom_rect_and_mean$mean_value)
+
+# Calculate the y-axis limits
+y_min <- min(as.numeric(as.factor(m24$q50abbr))) - 0.5
+y_max <- max(as.numeric(as.factor(m24$q50abbr))) + 0.5
+
+ggplot(data = m24, aes(y = as.factor(q50abbr), fill = as.factor(q50abbr))) +
+  geom_density_ridges(aes(x = q36_1), quantiles = 2, quantile_lines = TRUE) +
+  geom_rect(data = geom_rect_and_mean,
+            mapping = aes(xmin = min_mean_value - 0.1,
+                          xmax = max_mean_value + 0.1,
+                          ymin = as.numeric(as.factor(q50abbr)) - 0.4,
+                          ymax = as.numeric(as.factor(q50abbr)) + 0.4 + 1),
+            fill = "transparent",
+            size = 0.5) +
+  geom_rect(xmin = min_mean_value - 0.2 + 6, # Gray box around mean values
+            xmax = max_mean_value + 0.6 +6,
+            ymin = y_min,
+            ymax = y_max,
+            fill = "gray90",
+            color = "gray90",
+            alpha = 0.5) +
+  geom_text(data = geom_rect_and_mean,
+            aes(x = max_mean_value + 0.5, # Fixed x-position on the right
+                y = as.numeric(as.factor(q50abbr)),
+                label = round(mean_value, 0)),
+            hjust = -9,family = "G",
+            size = 4) +
+  labs(y = "", x = "", title = "",
+       caption = "Source: Denison March 2024 Survey.") +
+  labs(x = "Number of activities",
+       title = "Denison Students of Different Financial Background \n\n\nParticipating in Extracurricular Activities",
+       caption = "Source: Denison March 2024 Survey.") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major.y = element_line(color = "gray80", size = 0.25, linetype = "solid"),
+    plot.title.position = "plot",
+    plot.background = element_rect(fill = "gray90", color = "black"),
+    legend.position = "none", # Hide legend
+    plot.title = element_text(size = 5),
+    text = element_text(family = "G", size = 5)
+  )
+
+
+```

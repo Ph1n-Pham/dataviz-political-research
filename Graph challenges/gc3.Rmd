@@ -1,0 +1,111 @@
+---
+title: "gc3"
+author: "Phineas Pham"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+## Setup Environment
+```{r setup, include=FALSE, warning= FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(googlesheets4)
+library(car)
+library(scales)
+library(ggplot2)
+library(readr)
+library(ggthemes)
+library(maps)
+library(ggrepel)
+gs4_deauth()
+
+winl <- range_speedread("https://docs.google.com/spreadsheets/d/1RXODGOah5_aSrmCNhRKFl9H5jDSJeCXpjYjDikmTZv8/edit?usp=sharing")
+
+#Recodes upper house NAs to zero so we can math
+#the pipe %>% is produced by cmd-shift-m or ctrl-shift-m
+winl <- winl %>% mutate(U_seats=car::recode(U_seats, "NA=0"),
+                        U_women=car::recode(U_women, "NA=0"))
+#This creates total percent women from lower and upper houses
+winl <- winl %>% mutate(T_pctw=(L_women+U_women)/(L_seats+U_seats))
+
+
+#This brings in the Women in State Legislatures
+gs4_deauth()
+wisl <- range_speedread("https://docs.google.com/spreadsheets/d/109o5cvNxytbscanJN05e6FtY57XKQza1wxCVCm-jPSM/edit?usp=sharing")
+income <- range_speedread("https://docs.google.com/spreadsheets/d/1mFBP20LMl2PY0zily6qcGCmkYJbclPCnPNaS9S8DTBc/edit?usp=sharing")
+state_pop <- range_speedread("https://docs.google.com/spreadsheets/d/1RD2_CKOeaY9_1RJMPMXliZsullUnnJxLnlWa8OzDWZc/edit?usp=sharing")
+
+wisl <- left_join(wisl, state_pop, by=c("stabbr", "region"))
+wisl <- left_join(wisl, income, by="state")
+
+ed <- range_speedread("https://docs.google.com/spreadsheets/d/1zuhyOfi_RyVAF4AzgZMInCFybRMB7NdH1pSxhoUKX8Y/edit?usp=drive_link")
+ed <- ed %>% rename(state = statename)
+wisl <- left_join(wisl, ed, by="state")
+
+
+pvote <- range_speedread("https://docs.google.com/spreadsheets/d/18-AuFROUzTvIOcI9lx7Op8-4GdJ_Xywl5aZHm6_JAyk/edit?usp=drive_link")
+
+#we need to parse vote to just 2020 and then just the candidates and make a percentage variable!
+bvote <- pvote %>% filter(year==2020, party_simplified=="DEMOCRAT") %>% 
+  mutate(pbiden=candidatevotes/totalvotes) %>% dplyr::select(pbiden, stabbr)
+tvote <- pvote %>% filter(year==2020, party_simplified=="REPUBLICAN") %>% 
+  mutate(ptrump=candidatevotes/totalvotes) %>% dplyr::select(ptrump, stabbr)
+
+bvote <- left_join(bvote, tvote, by="stabbr")
+#Is it a Biden or Trump State?
+bvote <- bvote %>% mutate(bidenstate=case_when(pbiden>ptrump ~ "Biden State",
+                                               pbiden<ptrump ~ "Trump State"))
+wisl <- left_join(wisl, bvote, by="stabbr")
+
+sexism <- range_speedread("https://docs.google.com/spreadsheets/d/1EimuQyMDp23ADJ1T5YkqdGq2UkLeUpPWItGTs8uEQmM/edit?usp=drive_link")
+religion <- range_speedread("https://docs.google.com/spreadsheets/d/1WHuYKzUwdMSxtUy-D545oSl5kmzHECyrGWFHPoU1qds/edit?usp=drive_link")
+suffrage <- range_speedread("https://docs.google.com/spreadsheets/d/1LLS3Po3wDHg5MY6tnbntift9r17pvip2TNLG882huTI/edit?usp=drive_link")
+
+wisl <- left_join(wisl, suffrage, by=c("stabbr", "state","region"))
+wisl <- left_join(wisl, religion, by="stabbr")
+wisl <- left_join(wisl, sexism, by="stabbr")
+
+#make the suffrage data usable
+wisl <- wisl %>% mutate(suffrage_full_year=car::recode(suffrage_full_year, "NA=1920"), 
+                        firstmover=case_when(suffrage_full_year<1920 ~ "Early",
+                                             suffrage_full_year==1920 ~ "Amendment"))
+
+rm(pvote, bvote, tvote)
+rm(sexism, religion, suffrage)
+
+gc3 <- range_speedread("https://docs.google.com/spreadsheets/d/1XHJD-tDILBjCsZmgw0iadYnqzzZR_jlOvMsqlye5TUs/edit?usp=sharing")
+#gc2 <- na.omit(gc2)
+
+maps <- range_speedread("https://docs.google.com/spreadsheets/d/1wKlyzWVbdffNgXnKXVIZQhS2r_oy6UuoQzqoj8mS19I/edit?usp=drive_link")
+sc <- range_speedread("https://docs.google.com/spreadsheets/d/1tEU-5eivmnIa_G1Vf-tsfpFlyYDDzucJ_NMUtVgfp9I/edit?usp=drive_link")
+maps <- left_join(maps, wisl, by=c("state", "stabbr"))
+maps <- left_join(maps, sc, by="state")
+
+maps_gc3 <- left_join(maps, gc3, by="state")
+
+```
+
+
+
+```{r, include=TRUE, warning= FALSE, message = FALSE}
+library(ggrepel)
+maps_gc3 %>% ggplot(aes(x=pct_urban, y=pbiden, size=urbanpop, label="stabbr")) +
+  geom_point(color="#0081A7")+ #
+  geom_smooth(method="lm", color="cyan2")+
+  labs(x="Percentage of urbanization",
+       y="Likeliness to support Democratic candidates",
+       caption="Phineas Pham",
+       title="More Urbanized States Are More Likely to Support Democratic Candidates")+
+  theme(legend.position = "",
+        axis.ticks.x = element_blank(),
+        panel.background = element_rect(fill="white"),
+        panel.grid.major.y = element_line(color="gray80", size=.25, linetype="solid"),
+        plot.title.position = "plot",
+        plot.background = element_rect(fill="gray90", color="black"))
+#geom_text_repel() does not seem to work for this graph..
+```
+
+
+
